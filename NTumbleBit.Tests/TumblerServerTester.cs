@@ -17,6 +17,8 @@ using System.Net;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using System.Threading;
+using NBitcoin.Altcoins;
+using NBitcoin.Tests;
 using Newtonsoft.Json.Linq;
 
 namespace NTumbleBit.Tests
@@ -31,10 +33,9 @@ namespace NTumbleBit.Tests
 		{
 			try
 			{
-
 				var rootTestData = "TestData";
-				directory = rootTestData + "/" + directory;
-				_Directory = directory;
+                directory = rootTestData + "/" + directory;
+                _Directory = directory;
 				if(!Directory.Exists(rootTestData))
 					Directory.CreateDirectory(rootTestData);
 
@@ -51,15 +52,20 @@ namespace NTumbleBit.Tests
 					TryDelete(directory, true);
 				}
 
-				_NodeBuilder = NodeBuilder.Create(directory);
+				_NodeBuilder = NodeBuilder.Create(NodeDownloadData.Bitcoin.v0_16_3, AltNetworkSets.Bitcoin.Regtest, directory);
 				_NodeBuilder.ConfigParameters.Add("prematurewitness", "1");
 				_NodeBuilder.ConfigParameters.Add("walletprematurewitness", "1");
 
 				_TumblerNode = _NodeBuilder.CreateNode(false);
 				_AliceNode = _NodeBuilder.CreateNode(false);
 				_BobNode = _NodeBuilder.CreateNode(false);
-				
-				Directory.CreateDirectory(directory);
+
+                // TODO: Ugly hack for now, need to work out how to correctly propagate cookie auth settings into NTB tests
+                _TumblerNode.CookieAuth = false;
+                _AliceNode.CookieAuth = false;
+                _BobNode.CookieAuth = false;
+
+                Directory.CreateDirectory(directory);
 
 				_NodeBuilder.StartAll();
 
@@ -77,8 +83,8 @@ namespace NTumbleBit.Tests
 				File.WriteAllBytes(Path.Combine(conf.DataDir, "Voucher.pem"), TestKeys.Default2.ToBytes());
 
 				conf.RPC.Url = TumblerNode.CreateRPCClient().Address;
-				var creds = ExtractCredentials(File.ReadAllText(_TumblerNode.Config));
-				conf.RPC.User = creds.Item1;
+                var creds = ExtractCredentials(File.ReadAllText(_TumblerNode.Config));
+                conf.RPC.User = creds.Item1;
 				conf.RPC.Password = creds.Item2;
 				conf.TorMandatory = false;
 				conf.Network = Network.RegTest;
@@ -118,7 +124,6 @@ namespace NTumbleBit.Tests
 				((RPCBroadcastService)runtime.Services.BroadcastService).BatchInterval = TimeSpan.FromMilliseconds(10);
 				((RPCBlockExplorerService)runtime.Services.BlockExplorerService).BatchInterval = TimeSpan.FromMilliseconds(10);
 
-
 				var clientConfig = new TumblerClientConfiguration();
 				clientConfig.DataDir = Path.Combine(directory, "client");
 				clientConfig.AllowInsecure = !shouldBeStandard;
@@ -129,8 +134,8 @@ namespace NTumbleBit.Tests
 				clientConfig.OutputWallet.KeyPath = new KeyPath("0");
 				clientConfig.OutputWallet.RootKey = new ExtKey().Neuter().GetWif(conf.Network);
 				clientConfig.RPCArgs.Url = AliceNode.CreateRPCClient().Address;
-				creds = ExtractCredentials(File.ReadAllText(AliceNode.Config));
-				clientConfig.RPCArgs.User = creds.Item1;
+                creds = ExtractCredentials(File.ReadAllText(AliceNode.Config));
+                clientConfig.RPCArgs.User = creds.Item1;
 				clientConfig.RPCArgs.Password = creds.Item2;
 				clientConfig.TumblerServer = runtime.TumblerUris.First();
 
@@ -167,7 +172,7 @@ namespace NTumbleBit.Tests
 			if(blocksToFind <= 0)
 				return;
 
-			node.FindBlock(blocksToFind);
+			node.Generate(blocksToFind);
 			SyncNodes();
 		}
 
@@ -263,7 +268,6 @@ namespace NTumbleBit.Tests
 				return _AliceNode;
 			}
 		}
-
 
 		private readonly CoreNode _BobNode;
 		public CoreNode BobNode

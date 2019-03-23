@@ -157,7 +157,6 @@ namespace NTumbleBit.Tests
 				var serverTracker = server.ServerRuntime.Tracker;
 				var clientTracker = machine.Tracker;
 
-
 				machine.Update();
 				var cycle = machine.ClientChannelNegotiation.GetCycle();
 
@@ -177,7 +176,7 @@ namespace NTumbleBit.Tests
 				clientTracker.AssertKnown(TransactionType.ClientEscrow, machine.SolverClientSession.EscrowedCoin.Outpoint.Hash);
 
 				//Wait the client escrow is confirmed
-				server.AliceNode.FindBlock(2);
+				server.AliceNode.Generate(2);
 				server.SyncNodes();
 
 				//Server does not track anything until Alice gives proof of the escrow
@@ -230,8 +229,10 @@ namespace NTumbleBit.Tests
 					{
 						//Escape should be mined
 						Thread.Sleep(1000);
-						block = server.TumblerNode.FindBlock(1).First();
-						Assert.Equal(2, block.Transactions.Count);
+                        var blockHash = server.TumblerNode.Generate(1).First();
+                        block = server.TumblerNode.CreateRPCClient().GetBlock(blockHash);
+
+                        Assert.Equal(2, block.Transactions.Count);
 
 						serverTracker.AssertKnown(TransactionType.ClientEscape, block.Transactions[1].GetHash());
 						serverTracker.AssertKnown(TransactionType.ClientEscape, block.Transactions[1].Outputs[0].ScriptPubKey);
@@ -278,12 +279,15 @@ namespace NTumbleBit.Tests
 					transactions = server.ClientRuntime.Services.BroadcastService.TryBroadcast();
 				Assert.Single(transactions);
 				Assert.True(machine.ShouldStayConnected());
-				block = server.AliceNode.FindBlock().First();
-				//Should contains TumblerCashout
-				Assert.Equal(2, block.Transactions.Count);
+
+                var blockHash2 = server.AliceNode.Generate(1).First();
+                block = server.AliceNode.CreateRPCClient().GetBlock(blockHash2);
+
+                //Should contains TumblerCashout
+                Assert.Equal(2, block.Transactions.Count);
 				//Not enough confirmation, should have as much as safe period
 				Assert.True(machine.ShouldStayConnected());
-				server.AliceNode.FindBlock().First();
+				server.AliceNode.Generate(1).First();
 				Assert.False(machine.ShouldStayConnected());
 
 				clientTracker.AssertKnown(TransactionType.TumblerCashout, block.Transactions[1].GetHash());
@@ -292,9 +296,8 @@ namespace NTumbleBit.Tests
 				//Just a sanity tests, this one contains escrow redeem and offer redeem, both of which should not be available now
 				transactions = server.ClientRuntime.Services.BroadcastService.TryBroadcast();
 				Assert.Empty(transactions);
-
-
-				var allTransactions = server.AliceNode.CreateNodeClient().GetBlocks().SelectMany(b => b.Transactions).ToDictionary(t => t.GetHash());
+                
+                var allTransactions = server.AliceNode.CreateNodeClient().GetBlocks().SelectMany(b => b.Transactions).ToDictionary(t => t.GetHash());
 				var expectedRate = new FeeRate(100, 1);
 
 				foreach(var txId in new[]
@@ -314,7 +317,6 @@ namespace NTumbleBit.Tests
 							AssertRate(allTransactions, expectedRate, tx);
 					}
 				}
-
 
 				expectedRate = new FeeRate(50, 1);
 				foreach(var txId in new[]
@@ -359,7 +361,6 @@ namespace NTumbleBit.Tests
 			Assert.True(expectedRate.FeePerK.Almost(rate.FeePerK, 0.05m));
 		}
 
-
 		[Fact]
 		public void EscrowGetRedeemedIfTimeout()
 		{
@@ -377,11 +378,10 @@ namespace NTumbleBit.Tests
 
 				server.MineTo(server.AliceNode, cycle, CyclePhase.ClientChannelEstablishment);
 
-
 				machine.Update();
 
 				//Wait the client escrow is confirmed
-				server.AliceNode.FindBlock(2);
+				server.AliceNode.Generate(2);
 				server.SyncNodes();
 
 				//Server does not track anything until Alice gives proof of the escrow
@@ -455,8 +455,7 @@ namespace NTumbleBit.Tests
 					broadcasted = server.ServerRuntime.Services.TrustedBroadcastService.TryBroadcast();
 					Assert.Single(broadcasted);
 					server.ServerRuntime.Tracker.AssertKnown(TransactionType.ClientOffer, broadcasted[0].GetHash());
-					server.TumblerNode.FindBlock(1);
-
+					server.TumblerNode.Generate(1);
 
 					//Client Offer Refund broadcasted exactly when we are at ClientCashoutPhase + SafetyPeriodDuration
 					server.MineTo(server.AliceNode, cycle, CyclePhase.ClientCashoutPhase, offset: cycle.SafetyPeriodDuration - 1);
